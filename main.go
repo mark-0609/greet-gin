@@ -10,7 +10,7 @@ import (
 func main() {
 	config.Setup()
 	database.Init()
-	//database.InitES()
+	database.InitES()
 	fmt.Println("es client", database.GetElasticClient())
 
 	r := routers.InitRouter()
