@@ -1,0 +1,120 @@
+version: '1.0'
+
+networks:
+  gin-network:
+    driver: bridge
+
+services:
+  image: mysql/mysql-server:8.0.28
+  container_name: mysql
+  environment:
+    # 时区上海 - Time zone Shanghai (Change if needed)
+    TZ: Asia/Shanghai
+    # root 密码 - root password
+    MYSQL_ROOT_PASSWORD: PXDN93VRKUm8TeE7
+  ports:
+    - 33069:3306
+  volumes:
+    # 数据挂载 - Data mounting
+    - ./data/mysql/data:/var/lib/mysql
+    # 日志
+  command:
+    # 将mysql8.0默认密码策略 修改为 原先 策略 (mysql8.0对其默认策略做了更改 会导致密码无法匹配)
+    # Modify the Mysql 8.0 default password strategy to the original strategy (MySQL8.0 to change its default strategy will cause the password to be unable to match)
+    --default-authentication-plugin=mysql_native_password
+    --character-set-server=utf8mb4
+    --collation-server=utf8mb4_general_ci
+    --explicit_defaults_for_timestamp=true
+    --lower_case_table_names=1
+  privileged: true
+  restart: always
+  networks:
+    - gin-network
+
+  redis:
+    image: redis:6.2.5
+    container_name: redis
+    ports:
+      - 36379:6379
+    environment:
+      # 时区上海 - Time zone Shanghai (Change if needed)
+      TZ: Asia/Shanghai
+    volumes:
+      # 数据文件 - data files
+      - ./data/redis/data:/data:rw
+    command: "redis-server --requirepass G62m50oigInC30sf  --appendonly yes"
+    privileged: true
+    restart: always
+    networks:
+      - gin-network
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.42.0
+    container_name: jaeger
+    restart: always
+    ports:
+      - "16686:16686"
+    environment:
+      - SPAN_STORAGE_TYPE=elasticsearch
+      - ES_SERVER_URLS=http://elasticsearch:9200
+      - LOG_LEVEL=debug
+    networks:
+      - gin-network
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.13.4
+    container_name: elasticsearch
+    user: root
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - TZ=Asia/Shanghai
+    volumes:
+      - ./data/elasticsearch/data:/usr/share/elasticsearch/data
+    restart: always
+    ports:
+      - 9200:9200
+      - 9300:9300
+    networks:
+      - gin-network
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"  # AMQP 端口
+      - "15672:15672"  # 管理界面端口
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest  # 设置 RabbitMQ 默认用户名
+      - RABBITMQ_DEFAULT_PASS=guest  # 设置 RabbitMQ 默认密码
+    networks:
+      - gin-network
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.13.4
+    container_name: kibana
+    environment:
+      - elasticsearch.hosts=http://elasticsearch:9200
+      - TZ=Asia/Shanghai
+    restart: always
+    networks:
+      - gin-network
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+
+  nginx-gateway:
+    image: nginx:1.21.5
+    container_name: nginx-gateway
+    restart: always
+    privileged: true
+    environment:
+      - TZ=Asia/Shanghai
+    ports:
+      - 8888:8081
+    volumes:
+      - ./deploy/nginx/conf.d:/etc/nginx/conf.d
+      - ./data/nginx/log:/var/log/nginx
+    networks:
+      - gin-network

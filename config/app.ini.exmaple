@@ -1,0 +1,31 @@
+[database]
+DbHost = 127.0.0.1
+DbPort = 3306
+DbUser = root
+DbPassword = 123123
+DbDatabase = greet
+
+[redis]
+Addr = 127.0.0.1:36379
+Password = 123123
+DB = 1
+
+[es]
+UserName =
+Password = 123123
+Url = http://127.0.0.1:9200
+
+
+[log]
+LogPath = ..\bin\logs
+LogFileName = gin_log_
+MaxHour = 105120
+RotationHour = 24
+
+
+[server]
+Debug = true
+Environment = dev
+Port =  8881
+Domain = 127.0.0.1
+FilePath =  ..\bin\file
