@@ -27,7 +27,7 @@ gorm gin jaeger rabbitmq kibana mysql redis elasticsearch
 
 ------------------
 
-nginx: http://127.0.0.1:3001/web/test/test
+nginx: http://127.0.0.1:8081/
 
 jaeger: http://127.0.0.1:16686/search
 
