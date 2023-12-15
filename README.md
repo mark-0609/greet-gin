@@ -13,10 +13,11 @@ gorm gin jaeger rabbitmq kibana mysql redis elasticsearch
 ```shell
     cp config/app.ini.exmaple config/app.ini
 ```
-* 本地工具连接mysql的话要先进入容器，给root设置下远程连接权限
+* 本地工具连接mysql的话要先进入容器，给root设置下远程连接权限 
+* ##密码：PXDN93VRKUm8TeE7
 
 ```shell
- docker exec -it mysql mysql -uroot -p ##输入密码：PXDN93VRKUm8TeE7
+ docker exec -it mysql mysql -uroot -pPXDN93VRKUm8TeE7 
  use mysql;
  update user set host='%' where user='root';
  FLUSH PRIVILEGES;
