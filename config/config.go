@@ -93,7 +93,7 @@ func mapTo(section string, v interface{}) {
 // Setup 初始化配置
 func Setup() {
 	var err error
-	cfg, err = ini.Load("config/app.ini.exmaple")
+	cfg, err = ini.Load("config/app.ini")
 	if err != nil {
 		fmt.Println("loading app.ini.exmaple fail try to run as shell script…")
 		cfg, err = ini.Load("../../config/app.ini.exmaple")

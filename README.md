@@ -12,6 +12,6 @@
 ```
 
 * data和bin目录需有执行权限，data存放的是mysql和es执行数据，bin目录存放的是modd编译后的可执行文件
-* copy一份config目录的app.init.exmaple 文件，改为config.ini
+* copy一份config目录的app.init.exmaple 文件，改为app.ini
 * modd.conf :  modd热加载配置文件，关于modd更多用法 ： https://github.com/cortesi/modd
 * docker，启动 ~ docker-compose up -d
