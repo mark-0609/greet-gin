@@ -115,7 +115,7 @@ services:
     ports:
       - 8888:8081
     volumes:
-      - ./deploy/nginx/conf.d:/etc/nginx/conf.d
+      - ./deploy/nginx/conf.d.d:/etc/nginx/conf.d.d
       - ./data/nginx/log:/var/log/nginx
     networks:
       - gin-network

@@ -7,13 +7,13 @@ DbDatabase = greet
 
 [redis]
 Addr = 127.0.0.1:36379
-Password = 123123
+Password = G62m50oigInC30sf
 DB = 1
 
 [es]
 UserName =
 Password = 123123
-Url = http://127.0.0.1:9200
+Url = 127.0.0.1:9200
 
 
 [log]

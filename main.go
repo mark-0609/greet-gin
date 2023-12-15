@@ -16,5 +16,5 @@ func main() {
 	r := routers.InitRouter()
 
 	//r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-	r.Run("8881")
+	r.Run("3001")
 }
