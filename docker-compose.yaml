@@ -119,3 +119,19 @@ services:
       - ./data/nginx/log:/var/log/nginx
     networks:
       - gin-network
+    depends_on:
+      - goodjob
+
+  goodjob:
+    image: lyumikael/gomodd:v1.20.3
+    container_name: goodjob
+    environment:
+      TZ: Asia/Shanghai
+      GOPROXY: https://goproxy.cn,direct
+    working_dir: /go/goodjob
+    volumes:
+      - .:/go/goodjob
+    privileged: true
+    restart: always
+    networks:
+      - gin-network
