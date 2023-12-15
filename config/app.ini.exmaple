@@ -2,7 +2,7 @@
 DbHost = 127.0.0.1
 DbPort = 3306
 DbUser = root
-DbPassword = 123123
+DbPassword = PXDN93VRKUm8TeE7
 DbDatabase = greet
 
 [redis]
@@ -17,7 +17,7 @@ Url = http://127.0.0.1:9200
 
 
 [log]
-LogPath = ..\bin\logs
+LogPath = .\bin\logs
 LogFileName = gin_log_
 MaxHour = 105120
 RotationHour = 24
@@ -28,4 +28,4 @@ Debug = true
 Environment = dev
 Port =  8881
 Domain = 127.0.0.1
-FilePath =  ..\bin\file
+FilePath =  .\bin\file

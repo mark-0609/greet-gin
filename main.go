@@ -1,4 +1,4 @@
-package greet_gin
+package main
 
 import (
 	"fmt"
