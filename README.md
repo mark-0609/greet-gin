@@ -27,7 +27,7 @@ gorm gin jaeger rabbitmq kibana mysql redis elasticsearch
 
 ------------------
 
-nginx: http://127.0.0.1:8081/
+nginx: http://127.0.0.1:8888/
 
 jaeger: http://127.0.0.1:16686/search
 
