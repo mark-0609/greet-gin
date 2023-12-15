@@ -23,6 +23,7 @@ func InitRouter() *gin.Engine {
 	//test := router.Group("/web", middleware.RequestID())
 	test := router.Group("/web")
 	test.GET("/test/test", TestController.Test)
+	test.GET("/test/es", TestController.Es)
 
 	return router
 }

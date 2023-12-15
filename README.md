@@ -23,3 +23,30 @@ gorm gin jaeger rabbitmq kibana mysql redis elasticsearch
 ```
 * modd.conf :  modd热加载配置文件，关于modd更多用法 ： https://github.com/cortesi/modd
 * docker，启动 ~ docker-compose up -d
+
+
+------------------
+
+nginx: http://127.0.0.1:3001/web/test/test
+
+jaeger: http://127.0.0.1:16686/search
+
+kibana: http://127.0.0.1:5601/
+
+Mysql :  自行客户端工具(Navicat、Sequel Pro)查看
+
+- host : 127.0.0.1
+
+- port : 33069
+
+- username : root
+
+- pwd : PXDN93VRKUm8TeE7
+
+Redis :  自行工具（redisManager）查看
+
+- host : 127.0.0.1
+
+- port : 36379
+
+- pwd : G62m50oigInC30sf
