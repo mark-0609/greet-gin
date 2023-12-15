@@ -4,9 +4,10 @@
 gorm gin jaeger rabbitmq kibana mysql redis elasticsearch
 ### 注意点
 
-* data和bin目录需有执行权限，data存放的是mysql和es执行数据，bin目录存放的是modd编译后的可执行文件
+* bin目录需有执行权限，data存放的是mysql和es数据，bin目录存放的是modd编译后的可执行文件
+。在根目录下执行：
 ```shell
-    chmod -R 777 data && chmod -R 777 bin  
+    mkdir bin/data && chmod -R 777 bin
 ```
 * copy一份config目录的app.init.exmaple 文件，改为app.ini
 ```shell

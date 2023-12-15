@@ -17,7 +17,7 @@ services:
       - 33069:3306
     volumes:
       # 数据挂载 - Data mounting
-      - ./data/mysql/data:/var/lib/mysql
+      - ./bin/data/mysql/data:/var/lib/mysql
       # 日志
     command:
       # 将mysql8.0默认密码策略 修改为 原先 策略 (mysql8.0对其默认策略做了更改 会导致密码无法匹配)
@@ -42,7 +42,7 @@ services:
       TZ: Asia/Shanghai
     volumes:
       # 数据文件 - data files
-      - ./data/redis/data:/data:rw
+      - ./bin/data/redis/data:/data:rw
     command: "redis-server --requirepass G62m50oigInC30sf  --appendonly yes"
     privileged: true
     restart: always
@@ -71,7 +71,7 @@ services:
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
       - TZ=Asia/Shanghai
     volumes:
-      - ./data/elasticsearch/data:/usr/share/elasticsearch/data
+      - ./bin/data/elasticsearch/data:/usr/share/elasticsearch/data
     restart: always
     ports:
       - 9200:9200
@@ -116,7 +116,7 @@ services:
       - 8888:8081
     volumes:
       - ./deploy/nginx/conf.d:/etc/nginx/conf.d
-      - ./data/nginx/log:/var/log/nginx
+      - ./bin/data/nginx/log:/var/log/nginx
     networks:
       - gin-network
     depends_on:
