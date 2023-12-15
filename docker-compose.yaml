@@ -120,17 +120,17 @@ services:
     networks:
       - gin-network
     depends_on:
-      - goodjob
+      - greetGin
 
-  goodjob:
+  greetGin:
     image: lyumikael/gomodd:v1.20.3
-    container_name: goodjob
+    container_name: greetGin
     environment:
       TZ: Asia/Shanghai
       GOPROXY: https://goproxy.cn,direct
-    working_dir: /go/goodjob
+    working_dir: /go/greetGin
     volumes:
-      - .:/go/goodjob
+      - .:/go/greetGin
     privileged: true
     restart: always
     networks:
