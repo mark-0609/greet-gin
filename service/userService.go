@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/olivere/elastic/v7"
+	"github.com/sirupsen/logrus"
 	"greet_gin/models"
 	"reflect"
 	"strconv"
@@ -43,7 +44,7 @@ func NewUserService(es *UserES) *UserService {
 	}
 }
 
-func NewUserES(client *elastic.Client) *UserES {
+func UserEsInit(client *elastic.Client, ctx context.Context) *UserES {
 	index := fmt.Sprintf("%s_%s", "service", "user")
 	userEs := &UserES{
 		Client:  client,
@@ -51,24 +52,23 @@ func NewUserES(client *elastic.Client) *UserES {
 		Mapping: mappingTpl,
 	}
 
-	userEs.init()
+	userEs.init(ctx)
 
 	return userEs
 }
 
-func (es *UserES) init() {
-	ctx := context.Background()
+func (es *UserES) init(ctx context.Context) {
 
 	exists, err := es.Client.IndexExists(es.Index).Do(ctx)
 	if err != nil {
-		fmt.Printf("userEs init exist failed err is %s\n", err)
+		logrus.WithContext(ctx).Errorf("userEs init exist failed err is %s\n", err)
 		return
 	}
 
 	if !exists {
 		_, err := es.Client.CreateIndex(es.Index).Body(es.Mapping).Do(ctx)
 		if err != nil {
-			fmt.Printf("userEs init failed err is %s\n", err)
+			logrus.WithContext(ctx).Errorf("userEs init failed err is %s\n", err)
 			return
 		}
 	}
@@ -78,7 +78,7 @@ func (es *UserES) BatchAdd(ctx context.Context, user []models.User) error {
 	var err error
 	for i := 0; i < EsRetryLimit; i++ {
 		if err = es.batchAdd(ctx, user); err != nil {
-			fmt.Println("batch add failed ", err)
+			logrus.WithContext(ctx).Errorf("batch add failed:%v", err)
 			continue
 		}
 		return err
@@ -89,16 +89,16 @@ func (es *UserES) BatchAdd(ctx context.Context, user []models.User) error {
 func (es *UserES) batchAdd(ctx context.Context, user []models.User) error {
 	req := es.Client.Bulk().Index(es.Index)
 	for _, u := range user {
-		//u.UpdateTime = uint64(time.Now().UnixNano()) / uint64(time.Millisecond)
-		//u.CreateTime = uint64(time.Now().UnixNano()) / uint64(time.Millisecond)
 		doc := elastic.NewBulkIndexRequest().Id(strconv.Itoa(u.Id)).Doc(u)
 		req.Add(doc)
 	}
 	if req.NumberOfActions() < 0 {
+		logrus.WithContext(ctx).Infof("NumberOfActions < 0")
 		return nil
 	}
 	res, err := req.Do(ctx)
 	if err != nil {
+		logrus.WithContext(ctx).Errorf("batchAdd do failed:%v", err)
 		return err
 	}
 	// 任何子请求失败，该 `errors` 标志被设置为 `true` ，并且在相应的请求报告出错误明细

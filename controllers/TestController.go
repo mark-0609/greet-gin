@@ -2,6 +2,8 @@ package controllers
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/jinzhu/gorm"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"greet_gin/database"
 	"greet_gin/models"
@@ -12,9 +14,17 @@ type TestController struct{}
 
 func (t TestController) Test(c *gin.Context) {
 
+	//userEs := service.UserEsInit(database.InitES(), c.Request.Context())
+	//err = userEs.Search(c, userModel)
+	//if err != nil {
+	//	logrus.Errorf("err:%v", err)
+	//	c.JSON(200, err)
+	//	return
+	//}
+
 	c.JSON(200, Response{
 		Code: 0,
-		Msg:  "11111",
+		Msg:  "test",
 		Data: nil,
 	})
 	return
@@ -22,14 +32,117 @@ func (t TestController) Test(c *gin.Context) {
 
 func (t TestController) Es(c *gin.Context) {
 
-	userEs := service.NewUserES(database.InitES())
 	var userModel []models.User
 	db := database.GetDb()
-	db.Find(&userModel)
-	err := userEs.BatchAdd(c, userModel)
+	err := db.Find(&userModel).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			FailMsg("no data")
+			return
+		}
+		logrus.Errorf("database err:%v", err.Error())
+		FailMsg(err.Error())
+		return
+	}
+
+	userEs := service.UserEsInit(database.InitES(), c.Request.Context())
+	err = userEs.BatchAdd(c, userModel)
 	if err != nil {
 		logrus.Errorf("err:%v", err)
 		c.JSON(200, err)
 		return
 	}
+	type Res struct {
+		Id   int
+		Name string
+	}
+
+	var result []Res
+	for _, r := range userModel {
+		var res Res
+		res.Name = r.UserName
+		res.Id = r.Id
+		result = append(result, res)
+	}
+
+	c.JSON(200, DataMsg(result))
+	return
+}
+
+// CreateExchange 声明信道
+func (t TestController) CreateExchange(c *gin.Context) {
+	var req database.ExchangeEntity
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, Response{
+			Code: 0,
+			Msg:  err.Error(),
+			Data: nil,
+		})
+		return
+	}
+	rabbit := new(database.RabbitMQ)
+	if err := rabbit.Connect(); err != nil {
+		c.JSON(500, Response{
+			Code: 0,
+			Msg:  err.Error(),
+			Data: nil,
+		})
+		return
+	}
+	defer rabbit.Close()
+
+	if err := rabbit.DeclareExchange(req.Name, req.Type, req.Durable, req.AutoDelete, req.NoWait); err != nil {
+		logrus.Errorf("Error while declare exchange:%v", err.Error())
+		c.JSON(500, Response{
+			Code: 0,
+			Msg:  err.Error(),
+			Data: nil,
+		})
+		return
+	}
+	c.JSON(200, Response{
+		Code: 0,
+		Msg:  "ok",
+		Data: nil,
+	})
+	return
+}
+
+// CreateQueue 声明队列
+func (t TestController) CreateQueue(c *gin.Context) {
+	var req database.QueueEntity
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, Response{
+			Code: 0,
+			Msg:  err.Error(),
+			Data: nil,
+		})
+		return
+	}
+
+	rabbit := new(database.RabbitMQ)
+	if err := rabbit.Connect(); err != nil {
+		c.JSON(500, Response{
+			Code: 0,
+			Msg:  err.Error(),
+			Data: nil,
+		})
+		return
+	}
+	defer rabbit.Close()
+	if err := rabbit.DeclareQueue(req.Name, req.Durable, req.AutoDelete, req.Exclusive, req.NoWait); err != nil {
+		logrus.Errorf("Error while declare queue:%v", err.Error())
+		c.JSON(500, Response{
+			Code: 0,
+			Msg:  err.Error(),
+			Data: nil,
+		})
+		return
+	}
+	c.JSON(200, Response{
+		Code: 0,
+		Msg:  "ok",
+		Data: nil,
+	})
+	return
 }

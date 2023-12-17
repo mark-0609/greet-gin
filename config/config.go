@@ -24,6 +24,9 @@ var DatabaseSetting = &Mysql{}
 // RedisSetting redis配置
 var RedisSetting = &Redis{}
 
+// RabbitMqSetting mq
+var RabbitMqSetting = &RabbitMq{}
+
 // LogSetting 日志配置
 var LogSetting = &Log{}
 
@@ -38,6 +41,10 @@ type Redis struct {
 	Password string
 	DB       int
 	Port     string
+}
+
+type RabbitMq struct {
+	Url string
 }
 
 // 数据库配置
@@ -104,10 +111,11 @@ func Setup() {
 	}
 
 	mapTo("server", ServerSetting)
+	mapTo("log", LogSetting)
 	mapTo("database", DatabaseSetting)
 	mapTo("redis", RedisSetting)
-	mapTo("log", LogSetting)
 	mapTo("es", ESSetting)
+	mapTo("rabbitmq", RabbitMqSetting)
 
 	setupPath(LogSetting.LogPath)
 	setupPath(ServerSetting.FilePath)
@@ -241,7 +249,9 @@ func configLocalFilesystemLogger(logPath string, logFileName string, maxAge time
 		logrus.ErrorLevel: writer,
 		logrus.FatalLevel: writer,
 		logrus.PanicLevel: writer,
-	}, &ToggleLogFormatter{})
+	}, &ToggleLogFormatter{
+		TimestampFormat: "2006-01-02 15:04:05", // 格式日志时间
+	})
 
 	logrus.SetFormatter(&ToggleLogFormatter{})
 	logrus.AddHook(lfHook)

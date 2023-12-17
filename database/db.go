@@ -82,6 +82,17 @@ func autoMigrate() {
 				return nil
 			},
 		},
+		{
+			ID: "202312170000",
+			Migrate: func(tx *gorm.DB) error {
+				tx.AutoMigrate(&models.Article{})
+				return nil
+			},
+			Rollback: func(tx *gorm.DB) error {
+				tx.DropTable(&models.Article{})
+				return nil
+			},
+		},
 	})
 
 	if err = m.Migrate(); err != nil {

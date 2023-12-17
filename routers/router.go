@@ -13,17 +13,20 @@ func InitRouter() *gin.Engine {
 
 	gin.ForceConsoleColor()
 
-	TestController := new(controllers.TestController)
 	router := gin.New()
 	router.Use(gin.Logger(), gin.CustomRecovery(func(c *gin.Context, err interface{}) {
 		//middleware.PanicInfo(c, err)
 	}))
-	// router.Use(Publish()) //开启中间件 允许使用跨域请求
 
-	//test := router.Group("/web", middleware.RequestID())
-	test := router.Group("/web")
-	test.GET("/test/test", TestController.Test)
-	test.GET("/test/es", TestController.Es)
+	web := router.Group("/web")
+	TestController := new(controllers.TestController)
+	web.GET("/test/test", TestController.Test)
+	web.GET("/test/es", TestController.Es)
+	web.GET("/test/createQueue", TestController.CreateQueue)
+	web.GET("/test/createExchange", TestController.CreateExchange)
+
+	searchController := new(controllers.SearchController)
+	web.POST("/search/index", searchController.Index)
 
 	return router
 }
