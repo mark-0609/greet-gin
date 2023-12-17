@@ -22,8 +22,11 @@ func InitRouter() *gin.Engine {
 	TestController := new(controllers.TestController)
 	web.GET("/test/test", TestController.Test)
 	web.GET("/test/es", TestController.Es)
-	web.GET("/test/createQueue", TestController.CreateQueue)
-	web.GET("/test/createExchange", TestController.CreateExchange)
+	web.POST("/test/createQueue", TestController.CreateQueue)
+	web.POST("/test/createExchange", TestController.CreateExchange)
+	web.POST("/test/bindQueue", TestController.BindQueue)
+	web.POST("/test/productMq", TestController.ProductMq)
+	web.POST("/test/consumeMq", TestController.ConsumeMq)
 
 	searchController := new(controllers.SearchController)
 	web.POST("/search/index", searchController.Index)

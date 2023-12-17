@@ -115,7 +115,7 @@ func Setup() {
 	mapTo("database", DatabaseSetting)
 	mapTo("redis", RedisSetting)
 	mapTo("es", ESSetting)
-	mapTo("rabbitmq", RabbitMqSetting)
+	mapTo("rabbitMq", RabbitMqSetting)
 
 	setupPath(LogSetting.LogPath)
 	setupPath(ServerSetting.FilePath)
