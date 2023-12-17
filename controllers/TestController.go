@@ -9,7 +9,6 @@ import (
 	"greet_gin/database"
 	"greet_gin/models"
 	"greet_gin/service"
-	"time"
 )
 
 type TestController struct{}
@@ -263,32 +262,34 @@ func (t TestController) ProductMq(c *gin.Context) {
 
 // ConsumeMq 消费
 func (t TestController) ConsumeMq(c *gin.Context) {
-	rabbit := new(database.RabbitMQ)
-	if err := rabbit.Connect(); err != nil {
-		c.JSON(500, Response{
-			Code: 0,
-			Msg:  err.Error(),
-			Data: nil,
-		})
-		return
-	}
-	defer rabbit.Close()
+	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				logrus.Errorf("consume message fail :%v ", err)
+			}
+		}()
+		rabbit := new(database.RabbitMQ)
+		if err := rabbit.Connect(); err != nil {
+			c.JSON(500, Response{
+				Code: 0,
+				Msg:  err.Error(),
+				Data: nil,
+			})
+			return
+		}
+		defer rabbit.Close()
 
-	message := make(chan []byte)
+		message := make(chan []byte)
 
-	if err := rabbit.ConsumeQueue("queue-1", message); err != nil {
-		c.JSON(500, Response{
-			Code: 0,
-			Msg:  err.Error(),
-			Data: nil,
-		})
-		return
-	}
-	var idx int
-	for {
-		logrus.Infof("num:%v,Received message %s\n", idx, <-message)
-		idx++
-		time.Sleep(10 * time.Second)
-		return
-	}
+		if err := rabbit.ConsumeQueue("queue-1", message); err != nil {
+			c.JSON(500, Response{
+				Code: 0,
+				Msg:  err.Error(),
+				Data: nil,
+			})
+			return
+		}
+		logrus.Infof("Received message %s\n", <-message)
+	}()
+
 }
