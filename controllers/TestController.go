@@ -198,19 +198,6 @@ func (t TestController) BindQueue(c *gin.Context) {
 // ProductMq 生产数据
 func (t TestController) ProductMq(c *gin.Context) {
 
-	var articles []models.Article
-	db := database.GetDb()
-	err := db.Where("status=1").Limit(100000).Find(&articles).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			FailMsg("no data")
-			return
-		}
-		logrus.Errorf("database err:%v", err.Error())
-		FailMsg(err.Error())
-		return
-	}
-
 	var entity database.MessageEntity
 	if err := c.ShouldBindJSON(&entity); err != nil {
 		c.JSON(400, Response{
@@ -227,6 +214,18 @@ func (t TestController) ProductMq(c *gin.Context) {
 				logrus.Errorf("publish message fail :%v ", err)
 			}
 		}()
+		var articles []models.Article
+		db := database.GetDb()
+		err := db.Where("status=1").Select("id,article_name,content").Find(&articles).Error
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				FailMsg("no data")
+				return
+			}
+			logrus.Errorf("database err:%v", err.Error())
+			FailMsg(err.Error())
+			return
+		}
 		rabbit := new(database.RabbitMQ)
 		defer rabbit.Close()
 		if err = rabbit.Connect(); err != nil {
@@ -251,7 +250,6 @@ func (t TestController) ProductMq(c *gin.Context) {
 		}
 	}()
 
-	//
 	c.JSON(200, Response{
 		Code: 0,
 		Msg:  "ok",
@@ -289,7 +287,14 @@ func (t TestController) ConsumeMq(c *gin.Context) {
 			})
 			return
 		}
-		logrus.Infof("Received message %s\n", <-message)
+		for {
+			logrus.Infof("Received message %s\n", <-message)
+		}
 	}()
-
+	c.JSON(200, Response{
+		Code: 0,
+		Msg:  "ok",
+		Data: nil,
+	})
+	return
 }
