@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"github.com/olivere/elastic/v7"
+	"github.com/sirupsen/logrus"
 	"greet_gin/config"
 	"log"
 	"os"
@@ -28,7 +29,7 @@ func InitES() *elastic.Client {
 		// 设置info日志输出
 		elastic.SetInfoLog(log.New(os.Stdout, "", log.LstdFlags)))
 	if err != nil {
-		log.Fatalln("Failed to create elastic client", err)
+		logrus.Errorf("Failed to create elastic client:%v", err)
 	}
 	elasticClient = client
 	return elasticClient
