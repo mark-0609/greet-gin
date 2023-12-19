@@ -6,8 +6,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
 	"github.com/sirupsen/logrus"
+	"github.com/streadway/amqp"
 	"greet_gin/database"
 	"greet_gin/models"
+	"strings"
 )
 
 type RabbitMqController struct{}
@@ -75,7 +77,7 @@ type QueueBindReq struct {
 	Queue    string `json:"queue"`
 	Exchange string `json:"exchange"`
 	NoWait   bool   `json:"nowait"`
-	Keys     string `json:"keys"` // bind/routing keys
+	Keys     string `json:"keys"` // 英文逗号分割，绑定多个路由key
 }
 
 // BindQueue Exchange绑定队列
@@ -90,8 +92,12 @@ func (t RabbitMqController) BindQueue(c *gin.Context) {
 		return
 	}
 
+	var keys []string
+	for _, k := range strings.Split(entity.Keys, ",") {
+		keys = append(keys, k)
+	}
 	rabbit := database.GetRabbitMqConn()
-	if err := rabbit.BindQueue(entity.Queue, entity.Exchange, []string{entity.Keys}, entity.NoWait); err != nil {
+	if err := rabbit.BindQueue(entity.Queue, entity.Exchange, keys, entity.NoWait); err != nil {
 		logrus.Errorf("Error while bind queue:%v", err.Error())
 		c.JSON(500, Response{
 			Code: 0,
@@ -129,25 +135,25 @@ func (t RabbitMqController) ProductMq(c *gin.Context) {
 		}()
 		var articles []models.Article
 		db := database.GetDb()
-		err := db.Where("status=1").Limit(100000).Select("id,article_name,content").Find(&articles).Error
+		err := db.Where("status=1").Limit(100).Select("id,article_name,content").Find(&articles).Error
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				FailMsg("no data")
+				logrus.Errorf("article no data err:%v", err.Error())
 				return
 			}
 			logrus.Errorf("database err:%v", err.Error())
-			FailMsg(err.Error())
 			return
 		}
 		rabbit := database.GetRabbitMqConn()
+		//defer rabbit.Close()
 		for _, data := range articles {
-			res, _ := json.Marshal(data)
+			res, err := json.Marshal(data.Id)
+			if err != nil {
+				logrus.Errorf("json marshal err:%v", err.Error())
+				return
+			}
 			if err = rabbit.Publish(entity.Exchange, entity.Key, entity.DeliveryMode, entity.Priority, string(res)); err != nil {
-				c.JSON(500, Response{
-					Code: 0,
-					Msg:  err.Error(),
-					Data: nil,
-				})
+				logrus.Errorf("database err:%v", err.Error())
 				return
 			}
 		}
@@ -162,7 +168,9 @@ func (t RabbitMqController) ProductMq(c *gin.Context) {
 }
 
 type ConsumeMqReq struct {
-	QueueName string `json:"queueName"`
+	QueueName        string `json:"queueName"`
+	Consumer         string `json:"consumer"` // 指定消费者
+	HasNewConnection bool   `json:"hasNewConnection"`
 }
 
 // ConsumeMq 消费
@@ -183,32 +191,43 @@ func (t RabbitMqController) ConsumeMq(c *gin.Context) {
 				logrus.Errorf("consume message fail :%v ", err)
 			}
 		}()
-
-		//message := make(chan []byte)
-		//rabbit := database.GetRabbitMqConn()
-		//if err := rabbit.ConsumeQueue(req.QueueName, message); err != nil {
-		//	c.JSON(500, Response{
-		//		Code: 0,
-		//		Msg:  err.Error(),
-		//		Data: nil,
-		//	})
-		//	return
-		//}
-		//for {
-		//	logrus.Infof("Received message %s\n", <-message)
-		//}
-		message := make(chan []byte)
 		rabbit := database.GetRabbitMqConn()
-		if err := rabbit.ConsumeQueue(req.QueueName, message, false); err != nil {
-			c.JSON(500, Response{
-				Code: 0,
-				Msg:  err.Error(),
-				Data: nil,
-			})
+		if req.HasNewConnection {
+			rabbit = database.RabbitMqInit()
+		}
+		defer func(rabbit *database.RabbitMQ) {
+			err := rabbit.Close()
+			logrus.Infof("rabbitmq consume close success")
+			if err != nil {
+				logrus.Errorf("rabbitmq consume close fail :%v ", err)
+			}
+		}(rabbit)
+		consumer := req.Consumer
+		deliveries, err := rabbit.Channel.Consume(req.QueueName, consumer, false, false, false, false, nil)
+		if err != nil {
+			logrus.Errorf("[amqp] consume queue error: %s\n", err)
 			return
 		}
+		msg := make(chan []byte)
+		go func(deliveries <-chan amqp.Delivery, done chan error, msg chan []byte) {
+			for d := range deliveries {
+				var data int
+				err := json.Unmarshal(d.Body, &data)
+				if err != nil {
+					logrus.Errorf("err:%v", err)
+					return
+				}
+				if err := updateArticleData(data); err != nil {
+					logrus.Errorf("updateArticleData err:%v", err)
+					return
+				}
+				d.Ack(false)
+				msg <- d.Body
+			}
+			done <- nil
+		}(deliveries, rabbit.Done, msg)
 		for {
-			logrus.Infof("Received message %s\n", <-message)
+			<-msg
 		}
 	}()
 	c.JSON(200, Response{
@@ -217,4 +236,24 @@ func (t RabbitMqController) ConsumeMq(c *gin.Context) {
 		Data: nil,
 	})
 	return
+}
+
+func updateArticleData(id int) error {
+	var article models.Article
+	article.Status = 4
+	db := database.GetDb()
+	//db.Transaction(func(tx *gorm.DB) error {
+	//	if err := tx.Select("update article set `status`=1 where `id` =?", id).Error; err != nil {
+	//		return err
+	//	}
+	//	// 提交事务
+	//	return nil
+	//})
+	err := db.Model(models.Article{}).Where("id= ?", id).Update(&article).Error
+	//err := db.Select("UPDATE `article` SET `status` = '6'  WHERE id= ?", id).Error
+	if err != nil {
+		logrus.Errorf("article update err:%v", err.Error())
+		return err
+	}
+	return nil
 }

@@ -4,11 +4,10 @@ import (
 	"flag"
 	"github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
-	"greet_gin/config"
 )
 
 var (
-	amqpUri = flag.String("amqp", config.RabbitMqSetting.Url, "amqp uri")
+	amqpUri = flag.String("amqp", "amqp://guest:guest@114.132.210.241:5672/", "amqp uri")
 )
 
 // Entity for HTTP Request Body: Message/Exchange/Queue/QueueBind JSON Input
@@ -45,9 +44,9 @@ type QueueBindEntity struct {
 
 // RabbitMQ Operate Wrapper
 type RabbitMQ struct {
-	conn    *amqp.Connection
-	channel *amqp.Channel
-	done    chan error
+	Conn    *amqp.Connection
+	Channel *amqp.Channel
+	Done    chan error
 }
 
 var rabbitMqConn *RabbitMQ
@@ -64,30 +63,31 @@ func RabbitMqInit() *RabbitMQ {
 
 // GetRabbitMqConn 获取rabbitmq连接
 func GetRabbitMqConn() *RabbitMQ {
-	if rabbitMqConn == nil {
+	logrus.Infof("GetRabbitMqConn:%v", rabbitMqConn)
+	if rabbitMqConn.Conn.IsClosed() {
 		return RabbitMqInit()
 	}
 	return rabbitMqConn
 }
 
 func (r *RabbitMQ) Connect() (err error) {
-	r.conn, err = amqp.Dial(*amqpUri)
+	r.Conn, err = amqp.Dial(*amqpUri)
 	if err != nil {
 		logrus.Errorf("[amqp] connect error: %s\n", err)
 		return err
 	}
-	r.channel, err = r.conn.Channel()
+	r.Channel, err = r.Conn.Channel()
 	if err != nil {
-		logrus.Errorf("[amqp] get channel error: %s\n", err)
+		logrus.Errorf("[amqp] get Channel error: %s\n", err)
 		return err
 	}
-	r.done = make(chan error)
+	r.Done = make(chan error)
 	return nil
 }
 
 // DeclareQueue 1初始化队列
 func (r *RabbitMQ) DeclareQueue(name string, durable, autodelete, exclusive, nowait bool) (err error) {
-	_, err = r.channel.QueueDeclare(name, durable, autodelete, exclusive, nowait, nil)
+	_, err = r.Channel.QueueDeclare(name, durable, autodelete, exclusive, nowait, nil)
 	if err != nil {
 		logrus.Errorf("[amqp] declare queue error: %s\n", err)
 		return err
@@ -97,7 +97,7 @@ func (r *RabbitMQ) DeclareQueue(name string, durable, autodelete, exclusive, now
 
 // DeclareExchange 2初始化信道
 func (r *RabbitMQ) DeclareExchange(name, typ string, durable, autodelete, nowait bool) (err error) {
-	err = r.channel.ExchangeDeclare(name, typ, durable, autodelete, false, nowait, nil)
+	err = r.Channel.ExchangeDeclare(name, typ, durable, autodelete, false, nowait, nil)
 	if err != nil {
 		logrus.Errorf("[amqp] declare exchange error: %s\n", err)
 		return err
@@ -108,7 +108,7 @@ func (r *RabbitMQ) DeclareExchange(name, typ string, durable, autodelete, nowait
 // BindQueue 3绑定队列
 func (r *RabbitMQ) BindQueue(queue, exchange string, keys []string, nowait bool) (err error) {
 	for _, key := range keys {
-		if err = r.channel.QueueBind(queue, key, exchange, nowait, nil); err != nil {
+		if err = r.Channel.QueueBind(queue, key, exchange, nowait, nil); err != nil {
 			logrus.Errorf("[amqp] bind queue error: %s\n", err)
 			return err
 		}
@@ -118,7 +118,7 @@ func (r *RabbitMQ) BindQueue(queue, exchange string, keys []string, nowait bool)
 
 // Publish 4生产队列数据
 func (r *RabbitMQ) Publish(exchange, key string, deliverymode, priority uint8, body string) (err error) {
-	err = r.channel.Publish(exchange, key, false, false,
+	err = r.Channel.Publish(exchange, key, false, false,
 		amqp.Publishing{
 			Headers:         amqp.Table{},
 			ContentType:     "text/plain",
@@ -136,8 +136,8 @@ func (r *RabbitMQ) Publish(exchange, key string, deliverymode, priority uint8, b
 }
 
 // ConsumeQueue 5消费某个队列
-func (r *RabbitMQ) ConsumeQueue(queue string, message chan []byte,autoAck bool) (err error) {
-	deliveries, err := r.channel.Consume(queue, "", autoAck, false, false, false, nil)
+func (r *RabbitMQ) ConsumeQueue(queue string, message chan []byte, autoAck bool) (err error) {
+	deliveries, err := r.Channel.Consume(queue, "", autoAck, false, false, false, nil)
 	if err != nil {
 		logrus.Errorf("[amqp] consume queue error: %s\n", err)
 		return err
@@ -145,34 +145,16 @@ func (r *RabbitMQ) ConsumeQueue(queue string, message chan []byte,autoAck bool) 
 	go func(deliveries <-chan amqp.Delivery, done chan error, message chan []byte) {
 		for d := range deliveries {
 			message <- d.Body
+			d.Ack(false)
 		}
 		done <- nil
-	}(deliveries, r.done, message)
+	}(deliveries, r.Done, message)
 	return nil
 }
 
-// ConsumeQueueAck 消费需要手动ack
-//func (r *RabbitMQ) ConsumeQueueAck(queue string, fn func(data []byte)) error {
-//	deliveries, err := r.channel.Consume(queue, "", false, false, false, false, nil)
-//	if err != nil {
-//		logrus.Errorf("[amqp] consume queue error: %s\n", err)
-//		return err
-//	}
-//	msg := make(chan bool,5)
-//	go func(deliveries <-chan amqp.Delivery, done chan error) {
-//		for d := range deliveries {
-//			fn(d.Body)
-//			d.Ack(false)
-//		}
-//		done <- nil
-//	}(deliveries, r.done)
-//	<-msg
-//	return nil
-//}
-
 // DeleteExchange 删除信道
 func (r *RabbitMQ) DeleteExchange(name string) (err error) {
-	err = r.channel.ExchangeDelete(name, false, false)
+	err = r.Channel.ExchangeDelete(name, false, false)
 	if err != nil {
 		logrus.Errorf("[amqp] delete exchange error: %s\n", err)
 		return err
@@ -183,7 +165,7 @@ func (r *RabbitMQ) DeleteExchange(name string) (err error) {
 // DeleteQueue 删除队列
 func (r *RabbitMQ) DeleteQueue(name string) (err error) {
 	// TODO: other property wrapper
-	_, err = r.channel.QueueDelete(name, false, false, false)
+	_, err = r.Channel.QueueDelete(name, false, false, false)
 	if err != nil {
 		logrus.Errorf("[amqp] delete queue error: %s\n", err)
 		return err
@@ -194,7 +176,7 @@ func (r *RabbitMQ) DeleteQueue(name string) (err error) {
 // UnBindQueue 解除绑定队列
 func (r *RabbitMQ) UnBindQueue(queue, exchange string, keys []string) (err error) {
 	for _, key := range keys {
-		if err = r.channel.QueueUnbind(queue, key, exchange, nil); err != nil {
+		if err = r.Channel.QueueUnbind(queue, key, exchange, nil); err != nil {
 			logrus.Errorf("[amqp] unbind queue error: %s\n", err)
 			return err
 		}
@@ -204,7 +186,7 @@ func (r *RabbitMQ) UnBindQueue(queue, exchange string, keys []string) (err error
 
 // Close 关闭rabbitMq
 func (r *RabbitMQ) Close() (err error) {
-	err = r.conn.Close()
+	err = r.Conn.Close()
 	if err != nil {
 		logrus.Errorf("[amqp] close error: %s\n", err)
 		return err
