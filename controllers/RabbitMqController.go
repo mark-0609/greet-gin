@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis"
 	"github.com/jinzhu/gorm"
 	"github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 	"greet_gin/database"
 	"greet_gin/models"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type RabbitMqController struct{}
@@ -135,7 +138,7 @@ func (t RabbitMqController) ProductMq(c *gin.Context) {
 		}()
 		var articles []models.Article
 		db := database.GetDb()
-		err := db.Where("status=1").Limit(100).Select("id,article_name,content").Find(&articles).Error
+		err := db.Where("status=1").Limit(100000).Select("id").Find(&articles).Error
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				logrus.Errorf("article no data err:%v", err.Error())
@@ -195,6 +198,7 @@ func (t RabbitMqController) ConsumeMq(c *gin.Context) {
 		if req.HasNewConnection {
 			rabbit = database.RabbitMqInit()
 		}
+		//TODO: 待关闭
 		defer func(rabbit *database.RabbitMQ) {
 			err := rabbit.Close()
 			logrus.Infof("rabbitmq consume close success")
@@ -202,30 +206,36 @@ func (t RabbitMqController) ConsumeMq(c *gin.Context) {
 				logrus.Errorf("rabbitmq consume close fail :%v ", err)
 			}
 		}(rabbit)
+		redisClient := database.GetRedisClient()
+		msg := make(chan []byte)
 		consumer := req.Consumer
-		deliveries, err := rabbit.Channel.Consume(req.QueueName, consumer, false, false, false, false, nil)
+		err := rabbit.ConsumeQueue(req.QueueName, consumer, msg, false, func(body amqp.Delivery) (err error) {
+			var data int
+			err = json.Unmarshal(body.Body, &data)
+			if err != nil {
+				logrus.Errorf("err:%v", err)
+				return err
+			}
+			// 避免重复消费 可以使用全局唯一字段判断，或者将消费的数据id存入redis
+			result, err := redisClient.Get(strconv.Itoa(data)).Result()
+			if !errors.Is(err, redis.Nil) {
+				logrus.Infof("消息已被消费,忽略 %s", strconv.Itoa(data))
+				_ = body.Reject(false)
+				return
+			}
+			if len(result) > 0 {
+				logrus.Infof("redis data: %s", result)
+			}
+			if err := updateArticleData(data); err != nil {
+				logrus.Errorf("updateArticleData err:%v", err)
+				return err
+			}
+			return nil
+		})
 		if err != nil {
 			logrus.Errorf("[amqp] consume queue error: %s\n", err)
 			return
 		}
-		msg := make(chan []byte)
-		go func(deliveries <-chan amqp.Delivery, done chan error, msg chan []byte) {
-			for d := range deliveries {
-				var data int
-				err := json.Unmarshal(d.Body, &data)
-				if err != nil {
-					logrus.Errorf("err:%v", err)
-					return
-				}
-				if err := updateArticleData(data); err != nil {
-					logrus.Errorf("updateArticleData err:%v", err)
-					return
-				}
-				d.Ack(false)
-				msg <- d.Body
-			}
-			done <- nil
-		}(deliveries, rabbit.Done, msg)
 		for {
 			<-msg
 		}
@@ -242,18 +252,17 @@ func updateArticleData(id int) error {
 	var article models.Article
 	article.Status = 4
 	db := database.GetDb()
-	//db.Transaction(func(tx *gorm.DB) error {
-	//	if err := tx.Select("update article set `status`=1 where `id` =?", id).Error; err != nil {
-	//		return err
-	//	}
-	//	// 提交事务
-	//	return nil
-	//})
-	err := db.Model(models.Article{}).Where("id= ?", id).Update(&article).Error
-	//err := db.Select("UPDATE `article` SET `status` = '6'  WHERE id= ?", id).Error
-	if err != nil {
-		logrus.Errorf("article update err:%v", err.Error())
-		return err
-	}
-	return nil
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(models.Article{}).Where("id= ?", id).Update(&article).Error; err != nil {
+			logrus.Errorf("article update err:%v", err.Error())
+			return err
+		}
+		redisClient := database.GetRedisClient()
+		err := redisClient.Set(strconv.Itoa(id), id, time.Second*600).Err()
+		if err != nil {
+			logrus.Errorf("article redis set err:%v", err.Error())
+			return err
+		}
+		return nil
+	})
 }

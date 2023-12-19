@@ -46,10 +46,7 @@ func Init() {
 	db.LogMode(true)
 
 	autoMigrate()
-
 	redisInit()
-	fmt.Println("redis success")
-
 }
 
 // 关闭
@@ -65,6 +62,7 @@ func redisInit() {
 		Password: config.RedisSetting.Password,
 		DB:       config.RedisSetting.DB,
 	})
+	fmt.Println("redisClient:%v", redisClient)
 }
 
 func autoMigrate() {

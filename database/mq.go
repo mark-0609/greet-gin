@@ -136,8 +136,8 @@ func (r *RabbitMQ) Publish(exchange, key string, deliverymode, priority uint8, b
 }
 
 // ConsumeQueue 5消费某个队列
-func (r *RabbitMQ) ConsumeQueue(queue string, message chan []byte, autoAck bool) (err error) {
-	deliveries, err := r.Channel.Consume(queue, "", autoAck, false, false, false, nil)
+func (r *RabbitMQ) ConsumeQueue(queue, consumer string, message chan []byte, autoAck bool, fn func(data amqp.Delivery) error) (err error) {
+	deliveries, err := r.Channel.Consume(queue, consumer, autoAck, false, false, false, nil)
 	if err != nil {
 		logrus.Errorf("[amqp] consume queue error: %s\n", err)
 		return err
@@ -145,7 +145,13 @@ func (r *RabbitMQ) ConsumeQueue(queue string, message chan []byte, autoAck bool)
 	go func(deliveries <-chan amqp.Delivery, done chan error, message chan []byte) {
 		for d := range deliveries {
 			message <- d.Body
-			d.Ack(false)
+			if err := fn(d); err != nil {
+				return
+			}
+			if err = d.Ack(autoAck); err != nil {
+				logrus.Errorf("queue:%v, ack error :%v", queue, err)
+				return
+			}
 		}
 		done <- nil
 	}(deliveries, r.Done, message)
