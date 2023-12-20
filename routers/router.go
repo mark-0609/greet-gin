@@ -29,6 +29,7 @@ func InitRouter() *gin.Engine {
 	web.POST("/rabbitMq/bindQueue", rabbitMq.BindQueue)
 	web.POST("/rabbitMq/productMq", rabbitMq.ProductMq)
 	web.POST("/rabbitMq/consumeMq", rabbitMq.ConsumeMq)
+	web.POST("/rabbitMq/dead", rabbitMq.Dead)
 
 	searchController := new(controllers.SearchController)
 	web.POST("/search/index", searchController.Index)

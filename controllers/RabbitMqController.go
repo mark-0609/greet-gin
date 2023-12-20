@@ -138,7 +138,7 @@ func (t RabbitMqController) ProductMq(c *gin.Context) {
 		}()
 		var articles []models.Article
 		db := database.GetDb()
-		err := db.Where("status=1").Limit(100000).Select("id").Find(&articles).Error
+		err := db.Where("status=1").Limit(10).Select("id").Find(&articles).Error
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				logrus.Errorf("article no data err:%v", err.Error())
@@ -265,4 +265,57 @@ func updateArticleData(id int) error {
 		}
 		return nil
 	})
+}
+
+func (r RabbitMqController) Dead(c *gin.Context) {
+	rabbitMqConn := new(database.RabbitMQ)
+	if err := rabbitMqConn.Connect(); err != nil {
+		logrus.Errorf("Error connecting to RabbitMQ：%v", err)
+		return
+	}
+	normalQueue := "normal_queue"
+	deadQueue := "dead_queue"
+	deadExchange := "dead_exchange"
+	deadRoutingKey := "dead_exchange_routing_key"
+
+	_, err := rabbitMqConn.Channel.QueueDeclare(normalQueue, true, false, false, false, amqp.Table{
+		"x-message-ttl":             5000,           // 消息过期时间,毫秒
+		"x-dead-letter-exchange":    deadExchange,   // 指定死信交换机
+		"x-dead-letter-routing-key": deadRoutingKey, // 指定死信routing-key
+	})
+
+	if err != nil {
+		logrus.Errorf("RabbitMQ DeclareQueue err：%v", err)
+		return
+	}
+	err = rabbitMqConn.Channel.ExchangeDeclare(normalQueue, amqp.ExchangeDirect, true, false, false, false, nil)
+	if err != nil {
+		logrus.Errorf("RabbitMQ ExchangeDeclare err：%v", err)
+		return
+	}
+
+	err = rabbitMqConn.Channel.QueueBind(normalQueue, deadRoutingKey, deadExchange, false, nil)
+
+	// 声明死信队列
+	// args 为 nil。切记不要给死信队列设置消息过期时间,否则失效的消息进入死信队列后会再次过期。
+	_, err = rabbitMqConn.Channel.QueueDeclare(deadQueue, true, false, false, false, nil)
+	if err != nil {
+		logrus.Errorf("rabbitmq err:%v", err)
+		return
+	}
+
+	// 声明交换机
+	err = rabbitMqConn.Channel.ExchangeDeclare(deadExchange, amqp.ExchangeDirect, true, false, false, false, nil)
+	if err != nil {
+		logrus.Errorf("rabbitmq err:%v", err)
+		return
+	}
+
+	// 队列绑定（将队列、routing-key、交换机三者绑定到一起）
+	err = rabbitMqConn.Channel.QueueBind(deadQueue, deadRoutingKey, deadExchange, false, nil)
+	if err != nil {
+		logrus.Errorf("rabbitmq err:%v", err)
+		return
+	}
+
 }
