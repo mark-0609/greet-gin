@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"fmt"
 	"github.com/olivere/elastic/v7"
 	"github.com/sirupsen/logrus"
@@ -13,13 +14,23 @@ import (
 var elasticClient *elastic.Client
 
 // GetElasticClient 获取 elastic 连接
-func GetElasticClient() *elastic.Client {
+func GetElasticClient(ctx context.Context) *elastic.Client {
 	return elasticClient
+}
+
+type ElasticSearch struct {
+	MustQuery    []elastic.Query
+	MustNotQuery []elastic.Query
+	ShouldQuery  []elastic.Query
+	Filters      []elastic.Query
+	Sorters      []elastic.Sorter
+	From         int //分页
+	Size         int
 }
 
 func InitES() *elastic.Client {
 	url := fmt.Sprintf(config.ESSetting.Url)
-	client, err := elastic.NewClient(
+	elasticClient, err := elastic.NewClient(
 		//elastic 服务地址
 		elastic.SetURL(url),
 		elastic.SetSniff(false),
@@ -30,7 +41,7 @@ func InitES() *elastic.Client {
 		elastic.SetInfoLog(log.New(os.Stdout, "", log.LstdFlags)))
 	if err != nil {
 		logrus.Errorf("Failed to create elastic client:%v", err)
+		return elasticClient
 	}
-	elasticClient = client
 	return elasticClient
 }

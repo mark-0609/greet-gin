@@ -1,22 +1,26 @@
-package service
+package user
 
 import (
 	"context"
-	"fmt"
 	"github.com/olivere/elastic/v7"
 	"github.com/sirupsen/logrus"
+	"greet_gin/database"
 	"greet_gin/models"
 	"reflect"
 	"strconv"
 )
 
-type UserService struct {
-	Es *UserES
+type ServiceUserEs struct {
+	Client  *elastic.Client
+	Index   string
+	Mapping string
+	Ctx     context.Context
 }
 
-const EsRetryLimit = 3
-
-var mappingTpl = `{
+const (
+	EsRetryLimit     = 3
+	ServiceUserIndex = "service_user"
+	Mapping          = `{
 	"mappings":{
 		"properties":{
 			"id": 				{ "type": "long" },
@@ -31,54 +35,43 @@ var mappingTpl = `{
 			}
 		}
 	}`
+)
 
-type UserES struct {
-	Client  *elastic.Client
-	Index   string
-	Mapping string
-}
-
-func NewUserService(es *UserES) *UserService {
-	return &UserService{
-		Es: es,
+func NewUserService(ctx context.Context) (*ServiceUserEs, error) {
+	es := &ServiceUserEs{
+		Client:  database.GetElasticClient(ctx),
+		Index:   ServiceUserIndex,
+		Mapping: Mapping,
+		Ctx:     ctx,
 	}
-}
-
-func UserEsInit(client *elastic.Client, ctx context.Context) *UserES {
-	index := fmt.Sprintf("%s_%s", "service", "user")
-	userEs := &UserES{
-		Client:  client,
-		Index:   index,
-		Mapping: mappingTpl,
+	if err := es.createIndex(); err != nil {
+		return &ServiceUserEs{}, err
 	}
-
-	userEs.init(ctx)
-
-	return userEs
+	return es, nil
 }
 
-func (es *UserES) init(ctx context.Context) {
-
-	exists, err := es.Client.IndexExists(es.Index).Do(ctx)
+// createIndex 创建索引
+func (es *ServiceUserEs) createIndex() error {
+	exists, err := es.Client.IndexExists(es.Index).Do(es.Ctx)
 	if err != nil {
-		logrus.WithContext(ctx).Errorf("userEs init exist failed err is %s\n", err)
-		return
+		logrus.WithContext(es.Ctx).Errorf("ServiceUserEs init exist failed err is %s\n", err)
+		return err
 	}
-
 	if !exists {
-		_, err := es.Client.CreateIndex(es.Index).Body(es.Mapping).Do(ctx)
+		_, err := es.Client.CreateIndex(es.Index).Body(es.Mapping).Do(es.Ctx)
 		if err != nil {
-			logrus.WithContext(ctx).Errorf("userEs init failed err is %s\n", err)
-			return
+			logrus.WithContext(es.Ctx).Errorf("ServiceUserEs init failed err is %s\n", err)
+			return err
 		}
 	}
+	return nil
 }
 
-func (es *UserES) BatchAdd(ctx context.Context, user []models.User) error {
+func (es *ServiceUserEs) BatchAdd(user []models.User) error {
 	var err error
 	for i := 0; i < EsRetryLimit; i++ {
-		if err = es.batchAdd(ctx, user); err != nil {
-			logrus.WithContext(ctx).Errorf("batch add failed:%v", err)
+		if err = es.batchAdd(user); err != nil {
+			logrus.WithContext(es.Ctx).Errorf("batch add user failed:%v", err)
 			continue
 		}
 		return err
@@ -86,19 +79,19 @@ func (es *UserES) BatchAdd(ctx context.Context, user []models.User) error {
 	return err
 }
 
-func (es *UserES) batchAdd(ctx context.Context, user []models.User) error {
+func (es *ServiceUserEs) batchAdd(user []models.User) error {
 	req := es.Client.Bulk().Index(es.Index)
 	for _, u := range user {
 		doc := elastic.NewBulkIndexRequest().Id(strconv.Itoa(u.Id)).Doc(u)
 		req.Add(doc)
 	}
 	if req.NumberOfActions() < 0 {
-		logrus.WithContext(ctx).Infof("NumberOfActions < 0")
+		logrus.WithContext(es.Ctx).Infof("NumberOfActions < 0")
 		return nil
 	}
-	res, err := req.Do(ctx)
+	res, err := req.Do(es.Ctx)
 	if err != nil {
-		logrus.WithContext(ctx).Errorf("batchAdd do failed:%v", err)
+		logrus.WithContext(es.Ctx).Errorf("batchAdd do failed:%v", err)
 		return err
 	}
 	// 任何子请求失败，该 `errors` 标志被设置为 `true` ，并且在相应的请求报告出错误明细
@@ -118,10 +111,11 @@ func (es *UserES) batchAdd(ctx context.Context, user []models.User) error {
 	return nil
 }
 
-func (es *UserES) BatchUpdate(ctx context.Context, user []models.User) error {
+func (es *ServiceUserEs) BatchUpdate(user []models.User) error {
 	var err error
 	for i := 0; i < EsRetryLimit; i++ {
-		if err = es.batchUpdate(ctx, user); err != nil {
+		if err = es.batchUpdate(user); err != nil {
+			logrus.WithContext(es.Ctx).Errorf("batch update failed:%v", err)
 			continue
 		}
 		return err
@@ -129,7 +123,7 @@ func (es *UserES) BatchUpdate(ctx context.Context, user []models.User) error {
 	return err
 }
 
-func (es *UserES) batchUpdate(ctx context.Context, user []models.User) error {
+func (es *ServiceUserEs) batchUpdate(user []models.User) error {
 	req := es.Client.Bulk().Index(es.Index)
 	for _, u := range user {
 		//u.UpdateTime = uint64(time.Now().UnixNano()) / uint64(time.Millisecond)
@@ -140,7 +134,7 @@ func (es *UserES) batchUpdate(ctx context.Context, user []models.User) error {
 	if req.NumberOfActions() < 0 {
 		return nil
 	}
-	res, err := req.Do(ctx)
+	res, err := req.Do(es.Ctx)
 	if err != nil {
 		return err
 	}
@@ -162,10 +156,11 @@ func (es *UserES) batchUpdate(ctx context.Context, user []models.User) error {
 	return nil
 }
 
-func (es *UserES) BatchDel(ctx context.Context, user []models.User) error {
+func (es *ServiceUserEs) BatchDel(user []models.User) error {
 	var err error
 	for i := 0; i < EsRetryLimit; i++ {
-		if err = es.batchDel(ctx, user); err != nil {
+		if err = es.batchDel(user); err != nil {
+			logrus.WithContext(es.Ctx).Errorf("batch del user failed:%v", err)
 			continue
 		}
 		return err
@@ -173,7 +168,7 @@ func (es *UserES) BatchDel(ctx context.Context, user []models.User) error {
 	return err
 }
 
-func (es *UserES) batchDel(ctx context.Context, user []models.User) error {
+func (es *ServiceUserEs) batchDel(user []models.User) error {
 	req := es.Client.Bulk().Index(es.Index)
 	for _, u := range user {
 		doc := elastic.NewBulkDeleteRequest().Id(strconv.Itoa(u.Id))
@@ -184,7 +179,7 @@ func (es *UserES) batchDel(ctx context.Context, user []models.User) error {
 		return nil
 	}
 
-	res, err := req.Do(ctx)
+	res, err := req.Do(es.Ctx)
 	if err != nil {
 		return err
 	}
@@ -207,14 +202,14 @@ func (es *UserES) batchDel(ctx context.Context, user []models.User) error {
 }
 
 // 根据id 批量获取
-func (es *UserES) MGet(ctx context.Context, IDS []uint64) ([]models.User, error) {
-	userES := make([]models.User, 0, len(IDS))
-	idStr := make([]string, 0, len(IDS))
-	for _, id := range IDS {
-		idStr = append(idStr, strconv.FormatUint(id, 10))
+func (es *ServiceUserEs) GetUser(ids []int) ([]models.User, error) {
+	userES := make([]models.User, 0, len(ids))
+	idStr := make([]string, 0, len(ids))
+	for _, id := range ids {
+		idStr = append(idStr, strconv.Itoa(id))
 	}
 	resp, err := es.Client.Search(es.Index).Query(
-		elastic.NewIdsQuery().Ids(idStr...)).Size(len(IDS)).Do(ctx)
+		elastic.NewIdsQuery().Ids(idStr...)).Size(len(ids)).Do(es.Ctx)
 
 	if err != nil {
 		return nil, err
@@ -230,12 +225,44 @@ func (es *UserES) MGet(ctx context.Context, IDS []uint64) ([]models.User, error)
 	return userES, nil
 }
 
+type UserSearchReq struct {
+	Nickname  string `json:"nickname"`
+	Phone     string `json:"phone"`
+	Identity  string `json:"identity"`
+	Ancestral string `json:"ancestral"`
+	Num       int    `json:"num"`
+	Size      int    `json:"size"`
+}
+
 type SearchResult struct {
 	List  []models.User `json:"list"`
 	Count int64         `json:"count"`
 }
 
-func (es *UserES) Search(ctx context.Context, filter *models.EsSearch) (SearchResult, error) {
+// ToFilter 请求参数过滤
+func (r *UserSearchReq) ToFilter() *database.ElasticSearch {
+	var search database.ElasticSearch
+	if len(r.Nickname) != 0 {
+		search.ShouldQuery = append(search.ShouldQuery, elastic.NewMatchQuery("Nickname", r.Nickname))
+	}
+	if len(r.Phone) != 0 {
+		search.ShouldQuery = append(search.ShouldQuery, elastic.NewMatchQuery("Phone", r.Phone))
+	}
+	if len(r.Ancestral) != 0 {
+		search.ShouldQuery = append(search.ShouldQuery, elastic.NewMatchQuery("Ancestral", r.Ancestral))
+	}
+	if len(r.Identity) != 0 {
+		search.ShouldQuery = append(search.ShouldQuery, elastic.NewMatchQuery("Identity", r.Identity))
+	}
+	if search.Sorters == nil {
+		search.Sorters = append(search.Sorters, elastic.NewFieldSort("create_time").Desc())
+	}
+	search.From = (r.Num - 1) * r.Size
+	search.Size = r.Size
+	return &search
+}
+
+func (es *ServiceUserEs) Search(filter *database.ElasticSearch) (SearchResult, error) {
 	boolQuery := elastic.NewBoolQuery()
 	boolQuery.Must(filter.MustQuery...)
 	boolQuery.MustNot(filter.MustNotQuery...)
@@ -248,7 +275,7 @@ func (es *UserES) Search(ctx context.Context, filter *models.EsSearch) (SearchRe
 	}
 
 	service := es.Client.Search().Index(es.Index).Query(boolQuery).SortBy(filter.Sorters...).From(filter.From).Size(filter.Size)
-	resp, err := service.Do(ctx)
+	resp, err := service.Do(es.Ctx)
 	if err != nil {
 		return SearchResult{}, err
 	}

@@ -14,7 +14,7 @@ func main() {
 	database.Init()
 
 	database.InitES()
-	fmt.Println("es client", database.GetElasticClient())
+	//fmt.Println("es client", database.GetElasticClient())
 
 	database.RabbitMqInit()
 	fmt.Println("rabbitMq init successful:", database.GetRabbitMqConn())

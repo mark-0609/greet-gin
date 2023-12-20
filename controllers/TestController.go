@@ -7,10 +7,12 @@ import (
 	"github.com/sirupsen/logrus"
 	"greet_gin/database"
 	"greet_gin/models"
-	"greet_gin/service"
+	"greet_gin/service/user"
 )
 
-type TestController struct{}
+type TestController struct {
+	Controller
+}
 
 func (t TestController) Test(c *gin.Context) {
 
@@ -37,19 +39,23 @@ func (t TestController) Es(c *gin.Context) {
 	err := db.Find(&userModel).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			FailMsg("no data")
+			c.JSON(500, t.FailMsg(err.Error()))
 			return
 		}
 		logrus.Errorf("database err:%v", err.Error())
-		FailMsg(err.Error())
+		c.JSON(500, t.FailMsg(err.Error()))
 		return
 	}
 
-	userEs := service.UserEsInit(database.InitES(), c.Request.Context())
-	err = userEs.BatchAdd(c, userModel)
+	userEs, err := user.NewUserService(c.Request.Context())
 	if err != nil {
 		logrus.Errorf("err:%v", err)
-		c.JSON(200, err)
+		c.JSON(500, t.FailMsg(err.Error()))
+		return
+	}
+	err = userEs.BatchAdd(userModel)
+	if err != nil {
+		c.JSON(500, t.FailMsg(err.Error()))
 		return
 	}
 	type Res struct {
@@ -65,6 +71,6 @@ func (t TestController) Es(c *gin.Context) {
 		result = append(result, res)
 	}
 
-	c.JSON(200, DataMsg(result))
+	c.JSON(200, t.DataMsg(result))
 	return
 }
