@@ -1,0 +1,163 @@
+{
+	"info": {
+		"_postman_id": "2d79b805-183f-47e0-a501-e3c7ed2ad01f",
+		"name": "greet-gin",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "31649250"
+	},
+	"item": [
+		{
+			"name": "createQueue",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"durable\":true,\r\n    \"name\":\"queue-1\",\r\n    \"exclusive\":false,\r\n    \"nowait\":false,\r\n    \"autodelete\":false\r\n}"
+				},
+				"url": {
+					"raw": "{{greetGin}}/web/rabbitMq/createQueue",
+					"host": [
+						"{{greetGin}}"
+					],
+					"path": [
+						"web",
+						"rabbitMq",
+						"createQueue"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "createExchange",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"durable\":true,\r\n    \"name\":\"exchange-1\",\r\n    \"type\":\"direct\",\r\n    \"nowait\":false,\r\n    \"autodelete\":false\r\n}"
+				},
+				"url": {
+					"raw": "{{greetGin}}/web/rabbitMq/createExchange",
+					"host": [
+						"{{greetGin}}"
+					],
+					"path": [
+						"web",
+						"rabbitMq",
+						"createExchange"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "QueueBind",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"queue\":\"queue-1\",\r\n    \"exchange\":\"exchange-1\",\r\n    \"keys\":\"queue1-exchange1\",\r\n    \"nowait\":false\r\n}"
+				},
+				"url": {
+					"raw": "{{greetGin}}/web/rabbitMq/bindQueue",
+					"host": [
+						"{{greetGin}}"
+					],
+					"path": [
+						"web",
+						"rabbitMq",
+						"bindQueue"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "ProductMq",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{ \r\n    \"exchange\":\"exchange-1\",\r\n    \"key\":\"queue-2\",\r\n    \"deliverymode\":2, \r\n    \"priority\":1,\r\n    \"body\":\"sssssssssssssssss11111sssssssssss\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{greetGin}}/web/rabbitMq/productMq",
+					"host": [
+						"{{greetGin}}"
+					],
+					"path": [
+						"web",
+						"rabbitMq",
+						"productMq"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "ConsumeMq",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"queueName\":\"queue-2\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{greetGin}}/web/rabbitMq/consumeMq",
+					"host": [
+						"{{greetGin}}"
+					],
+					"path": [
+						"web",
+						"rabbitMq",
+						"consumeMq"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "create dead",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    // 默认是正常队列消费\r\n    // \"has_create_dead_queue\":true,\r\n    // \"dead_consume\":true,\r\n    \"publish\":true\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{greetGin}}/web/rabbitMq/dead",
+					"host": [
+						"{{greetGin}}"
+					],
+					"path": [
+						"web",
+						"rabbitMq",
+						"dead"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

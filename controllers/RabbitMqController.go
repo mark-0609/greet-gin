@@ -156,6 +156,7 @@ func (t RabbitMqController) ProductMq(c *gin.Context) {
 				logrus.Errorf("json marshal err:%v", err.Error())
 				return
 			}
+			// TODO: 需要开启confirm模式 手动ack
 			if err = rabbit.Publish(entity.Exchange, entity.Key, entity.DeliveryMode, entity.Priority, string(res)); err != nil {
 				logrus.Errorf("database err:%v", err.Error())
 				return
