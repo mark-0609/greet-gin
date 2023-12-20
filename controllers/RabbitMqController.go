@@ -3,6 +3,7 @@ package controllers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis"
 	"github.com/jinzhu/gorm"
@@ -10,6 +11,7 @@ import (
 	"github.com/streadway/amqp"
 	"greet_gin/database"
 	"greet_gin/models"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -267,55 +269,178 @@ func updateArticleData(id int) error {
 	})
 }
 
+type DeadReq struct {
+	HasCreateDeadQueue bool `json:"has_create_dead_queue"`
+	Publish            bool `json:"publish"`
+	DeadConsume        bool `json:"dead_consume"`
+}
+
 func (r RabbitMqController) Dead(c *gin.Context) {
-	rabbitMqConn := new(database.RabbitMQ)
-	if err := rabbitMqConn.Connect(); err != nil {
-		logrus.Errorf("Error connecting to RabbitMQ：%v", err)
+	var req DeadReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, Response{
+			Code: 0,
+			Msg:  err.Error(),
+			Data: nil,
+		})
 		return
 	}
-	normalQueue := "normal_queue"
-	deadQueue := "dead_queue"
-	deadExchange := "dead_exchange"
-	deadRoutingKey := "dead_exchange_routing_key"
+	if req.HasCreateDeadQueue {
+		createDeadQueue()
+		c.JSON(200, Response{
+			Code: 0,
+			Msg:  "createDeadQueue ok",
+			Data: nil,
+		})
+		return
+	}
+
+	if req.Publish {
+		publish()
+		c.JSON(200, Response{
+			Code: 0,
+			Msg:  "publish ok",
+			Data: nil,
+		})
+		return
+	}
+	if req.DeadConsume {
+		deadConsume()
+		return
+	}
+	consume()
+
+	c.JSON(200, Response{
+		Code: 0,
+		Msg:  "ok",
+		Data: nil,
+	})
+	return
+}
+
+var (
+	normalQueue      = "normal_queue"
+	normalExchange   = "normal_exchange"
+	normalRoutingKey = "normal_exchange_routing_key"
+	deadQueue        = "dead_queue"
+	deadExchange     = "dead_exchange"
+	deadRoutingKey   = "dead_exchange_routing_key"
+)
+
+// 普通队列生产者
+func publish() {
+	message := "msg" + strconv.Itoa(int(time.Now().Unix()))
+	fmt.Println(message)
+
+	// 发布消息
+	rabbitMqConn := database.GetRabbitMqConn()
+	err := rabbitMqConn.Channel.Publish(normalExchange, normalRoutingKey, false, false, amqp.Publishing{
+		ContentType: "text/plain",
+		Body:        []byte(message),
+	})
+	if err != nil {
+		logrus.Errorf("Error publishing Rabbit:%v", err)
+		return
+	}
+}
+
+// 普通队列消费
+func consume() {
+	rabbitMqConn := database.GetRabbitMqConn()
+	msgsCh, err := rabbitMqConn.Channel.Consume(normalQueue, "", false, false, false, false, nil)
+	if err != nil {
+		logrus.Errorf("消费失败:%v", err)
+		return
+	}
+
+	forever := make(chan bool)
+	go func() {
+		for d := range msgsCh {
+			// 要实现的逻辑
+			log.Printf("接收的消息: %s", d.Body)
+
+			// 手动应答
+			d.Ack(false)
+			//d.Reject(true)
+		}
+	}()
+	log.Printf("[*] Waiting for message, To exit press CTRL+C")
+	for {
+		<-forever
+	}
+}
+
+// 死信队列消费
+func deadConsume() {
+	rabbitMqConn := database.GetRabbitMqConn()
+	msgsCh, err := rabbitMqConn.Channel.Consume(deadQueue, "", false, false, false, false, nil)
+	if err != nil {
+		logrus.Errorf("err:%v", err)
+		return
+	}
+
+	forever := make(chan bool)
+	go func() {
+		for d := range msgsCh {
+			// 要实现的逻辑
+			log.Printf("接收的消息: %s", d.Body)
+
+			// 手动应答
+			d.Ack(false)
+			//d.Reject(true)
+		}
+	}()
+	log.Printf("[*] Waiting for message, To exit press CTRL+C")
+	for {
+		<-forever
+	}
+}
+
+// 声明死信exchange\路由key、队列
+func createDeadQueue() {
+	rabbitMqConn := database.GetRabbitMqConn()
 
 	_, err := rabbitMqConn.Channel.QueueDeclare(normalQueue, true, false, false, false, amqp.Table{
 		"x-message-ttl":             5000,           // 消息过期时间,毫秒
 		"x-dead-letter-exchange":    deadExchange,   // 指定死信交换机
 		"x-dead-letter-routing-key": deadRoutingKey, // 指定死信routing-key
 	})
-
 	if err != nil {
-		logrus.Errorf("RabbitMQ DeclareQueue err：%v", err)
-		return
-	}
-	err = rabbitMqConn.Channel.ExchangeDeclare(normalQueue, amqp.ExchangeDirect, true, false, false, false, nil)
-	if err != nil {
-		logrus.Errorf("RabbitMQ ExchangeDeclare err：%v", err)
+		logrus.Errorf("创建normal队列失败：%v", err)
 		return
 	}
 
-	err = rabbitMqConn.Channel.QueueBind(normalQueue, deadRoutingKey, deadExchange, false, nil)
+	err = rabbitMqConn.Channel.ExchangeDeclare(normalExchange, amqp.ExchangeDirect, true, false, false, false, nil)
+	if err != nil {
+		logrus.Errorf("创建normal交换机失败：%v", err)
+		return
+	}
+
+	err = rabbitMqConn.Channel.QueueBind(normalQueue, normalRoutingKey, normalExchange, false, nil)
+	if err != nil {
+		logrus.Errorf("normal：队列、交换机、routing-key 绑定失败 :%v", err)
+		return
+	}
 
 	// 声明死信队列
 	// args 为 nil。切记不要给死信队列设置消息过期时间,否则失效的消息进入死信队列后会再次过期。
 	_, err = rabbitMqConn.Channel.QueueDeclare(deadQueue, true, false, false, false, nil)
 	if err != nil {
-		logrus.Errorf("rabbitmq err:%v", err)
+		logrus.Errorf("创建dead队列失败:%v", err)
 		return
 	}
 
 	// 声明交换机
 	err = rabbitMqConn.Channel.ExchangeDeclare(deadExchange, amqp.ExchangeDirect, true, false, false, false, nil)
 	if err != nil {
-		logrus.Errorf("rabbitmq err:%v", err)
+		logrus.Errorf("创建dead交换机失败:%v", err)
 		return
 	}
 
 	// 队列绑定（将队列、routing-key、交换机三者绑定到一起）
 	err = rabbitMqConn.Channel.QueueBind(deadQueue, deadRoutingKey, deadExchange, false, nil)
 	if err != nil {
-		logrus.Errorf("rabbitmq err:%v", err)
+		logrus.Errorf("dead：队列、交换机、routing-key 绑定失败:%v", err)
 		return
 	}
-
 }
