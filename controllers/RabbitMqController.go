@@ -11,7 +11,6 @@ import (
 	"github.com/streadway/amqp"
 	"greet_gin/database"
 	"greet_gin/models"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -357,14 +356,14 @@ func consume() {
 	go func() {
 		for d := range msgsCh {
 			// 要实现的逻辑
-			log.Printf("接收的消息: %s", d.Body)
+			logrus.Infof("接收的消息: %s", d.Body)
 
 			// 手动应答
 			d.Ack(false)
 			//d.Reject(true)
 		}
 	}()
-	log.Printf("[*] Waiting for message, To exit press CTRL+C")
+	logrus.Infof("[*] Waiting for message, To exit press CTRL+C")
 	for {
 		<-forever
 	}
@@ -383,14 +382,14 @@ func deadConsume() {
 	go func() {
 		for d := range msgsCh {
 			// 要实现的逻辑
-			log.Printf("接收的消息: %s", d.Body)
+			logrus.Infof("接收的消息: %s", d.Body)
 
 			// 手动应答
 			d.Ack(false)
 			//d.Reject(true)
 		}
 	}()
-	log.Printf("[*] Waiting for message, To exit press CTRL+C")
+	logrus.Infof("[*] Waiting for message, To exit press CTRL+C")
 	for {
 		<-forever
 	}

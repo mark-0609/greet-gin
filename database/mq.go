@@ -50,6 +50,7 @@ type RabbitMQ struct {
 }
 
 var rabbitMqConn *RabbitMQ
+var connRetry = 3
 
 // RabbitMqInit 初始化
 func RabbitMqInit() *RabbitMQ {
@@ -74,7 +75,17 @@ func (r *RabbitMQ) Connect() (err error) {
 	r.Conn, err = amqp.Dial(*amqpUri)
 	if err != nil {
 		logrus.Errorf("[amqp] connect error: %s\n", err)
-		return err
+		for i := 0; i <= connRetry; i++ {
+			r.Conn, err = amqp.Dial(*amqpUri)
+			if err != nil {
+				logrus.Errorf("[amqp] connect retry count :%v, error: %s\n", i, err)
+			} else {
+				break
+			}
+		}
+		if err != nil {
+			return err
+		}
 	}
 	r.Channel, err = r.Conn.Channel()
 	if err != nil {
