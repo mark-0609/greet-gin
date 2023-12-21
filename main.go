@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"greet_gin/config"
 	"greet_gin/database"
@@ -14,7 +15,7 @@ func main() {
 	database.Init()
 
 	database.InitES()
-	//fmt.Println("es client", database.GetElasticClient())
+	fmt.Println("es client", database.GetElasticClient(context.Background()))
 
 	database.RabbitMqInit()
 	fmt.Println("rabbitMq init successful:", database.GetRabbitMqConn())

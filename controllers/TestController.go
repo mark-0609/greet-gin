@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
 	"github.com/pkg/errors"
@@ -46,8 +47,7 @@ func (t TestController) Es(c *gin.Context) {
 		c.JSON(500, t.FailMsg(err.Error()))
 		return
 	}
-
-	userEs, err := user.NewUserService(c.Request.Context())
+	userEs, err := user.NewUserService(context.Background())
 	if err != nil {
 		logrus.Errorf("err:%v", err)
 		c.JSON(500, t.FailMsg(err.Error()))
@@ -55,6 +55,7 @@ func (t TestController) Es(c *gin.Context) {
 	}
 	err = userEs.BatchAdd(userModel)
 	if err != nil {
+		logrus.Errorf("BatchAdd err:%v", err)
 		c.JSON(500, t.FailMsg(err.Error()))
 		return
 	}
@@ -70,7 +71,7 @@ func (t TestController) Es(c *gin.Context) {
 		res.Id = r.Id
 		result = append(result, res)
 	}
-
+	logrus.Infof("DATA:%v", len(result))
 	c.JSON(200, t.DataMsg(result))
 	return
 }

@@ -24,6 +24,9 @@ func (s SearchController) Index(c *gin.Context) {
 		return
 	}
 
-	//c.JSON(200,DataMsg(result))
+	//es, _ := user.NewUserService(context.Background())
+	//es.BatchAdd()
+
+	c.JSON(200, s.SuccessMsg("result"))
 	return
 }

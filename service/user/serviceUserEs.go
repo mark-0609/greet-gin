@@ -39,7 +39,7 @@ const (
 
 func NewUserService(ctx context.Context) (*ServiceUserEs, error) {
 	es := &ServiceUserEs{
-		Client:  database.GetElasticClient(ctx),
+		Client:  database.InitES(),
 		Index:   ServiceUserIndex,
 		Mapping: Mapping,
 		Ctx:     ctx,
@@ -54,13 +54,13 @@ func NewUserService(ctx context.Context) (*ServiceUserEs, error) {
 func (es *ServiceUserEs) createIndex() error {
 	exists, err := es.Client.IndexExists(es.Index).Do(es.Ctx)
 	if err != nil {
-		logrus.WithContext(es.Ctx).Errorf("ServiceUserEs init exist failed err is %s\n", err)
+		logrus.Errorf("ServiceUserEs init exist failed err is %s\n", err)
 		return err
 	}
 	if !exists {
 		_, err := es.Client.CreateIndex(es.Index).Body(es.Mapping).Do(es.Ctx)
 		if err != nil {
-			logrus.WithContext(es.Ctx).Errorf("ServiceUserEs init failed err is %s\n", err)
+			logrus.Errorf("ServiceUserEs init failed err is %s\n", err)
 			return err
 		}
 	}
@@ -71,7 +71,7 @@ func (es *ServiceUserEs) BatchAdd(user []models.User) error {
 	var err error
 	for i := 0; i < EsRetryLimit; i++ {
 		if err = es.batchAdd(user); err != nil {
-			logrus.WithContext(es.Ctx).Errorf("batch add user failed:%v", err)
+			logrus.Errorf("batch add user failed:%v", err)
 			continue
 		}
 		return err
@@ -85,13 +85,9 @@ func (es *ServiceUserEs) batchAdd(user []models.User) error {
 		doc := elastic.NewBulkIndexRequest().Id(strconv.Itoa(u.Id)).Doc(u)
 		req.Add(doc)
 	}
-	if req.NumberOfActions() < 0 {
-		logrus.WithContext(es.Ctx).Infof("NumberOfActions < 0")
-		return nil
-	}
 	res, err := req.Do(es.Ctx)
 	if err != nil {
-		logrus.WithContext(es.Ctx).Errorf("batchAdd do failed:%v", err)
+		logrus.Errorf("batchAdd do failed:%v", err)
 		return err
 	}
 	// 任何子请求失败，该 `errors` 标志被设置为 `true` ，并且在相应的请求报告出错误明细
@@ -115,7 +111,7 @@ func (es *ServiceUserEs) BatchUpdate(user []models.User) error {
 	var err error
 	for i := 0; i < EsRetryLimit; i++ {
 		if err = es.batchUpdate(user); err != nil {
-			logrus.WithContext(es.Ctx).Errorf("batch update failed:%v", err)
+			logrus.Errorf("batch update failed:%v", err)
 			continue
 		}
 		return err
@@ -160,7 +156,7 @@ func (es *ServiceUserEs) BatchDel(user []models.User) error {
 	var err error
 	for i := 0; i < EsRetryLimit; i++ {
 		if err = es.batchDel(user); err != nil {
-			logrus.WithContext(es.Ctx).Errorf("batch del user failed:%v", err)
+			logrus.Errorf("batch del user failed:%v", err)
 			continue
 		}
 		return err
