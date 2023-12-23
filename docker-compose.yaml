@@ -129,6 +129,7 @@ services:
       - TZ=Asia/Shanghai
     ports:
       - 8888:8081
+      - 10108:10108
     volumes:
       - ./deploy/nginx/conf.d:/etc/nginx/conf.d
       - ./bin/data/nginx/log:/var/log/nginx
