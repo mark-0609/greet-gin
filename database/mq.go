@@ -1,13 +1,12 @@
 package database
 
 import (
-	"flag"
 	"github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 )
 
 var (
-	amqpUri = flag.String("amqp", "amqp://guest:guest@114.132.210.241:5672/", "amqp uri")
+	rabbitMQURL = "amqp://guest:guest@114.132.210.241:5672/"
 )
 
 // Entity for HTTP Request Body: Message/Exchange/Queue/QueueBind JSON Input
@@ -62,6 +61,54 @@ func RabbitMqInit() *RabbitMQ {
 	return rabbitMqConn
 }
 
+func failOnError(err error, msg string) {
+	if err != nil {
+		logrus.Errorf("%s: `%s`", msg, err)
+	}
+}
+
+// CreateConnAndChannel 创建新的连接和管道
+func CreateConnAndChannel() (*amqp.Channel, *amqp.Connection) {
+	conn, err := amqp.Dial(rabbitMQURL)
+	failOnError(err, "Failed to connect to RabbitMQ")
+	ch, err := conn.Channel()
+	failOnError(err, "Failed to open a channel")
+	return ch, conn
+}
+
+// ConsumeMessagesWithAck 实时消费某个队列任务
+func ConsumeMessagesWithAck(queueName string, processMessage func(amqp.Delivery) error, errorFunc func()) {
+	ch, _ := CreateConnAndChannel()
+	for {
+		msgs, err := ch.Consume(
+			queueName,
+			"",
+			false,
+			false,
+			false,
+			false,
+			nil,
+		)
+		failOnError(err, "Failed to register a consumer")
+		for d := range msgs {
+			logrus.Infof("Received a message: %s", d.Body)
+			// time.Sleep(time.Second * 3)
+			// 在这里处理消息，确保没有发生错误，否则消息可能会被丢失
+			err := processMessage(d)
+			logrus.Errorf("processing message: %v", err)
+			if err == nil {
+				d.Ack(false) // 确认消息已经被处理
+			} else {
+				logrus.Errorf("Error processing message: %v", err)
+				// 可以在这里实现错误处理和重试逻辑
+				// 处理消息失败时，重新发布消息到队列
+				errorFunc()
+				d.Nack(false, true)
+			}
+		}
+	}
+}
+
 // GetRabbitMqConn 获取rabbitmq连接
 func GetRabbitMqConn() *RabbitMQ {
 	logrus.Infof("GetRabbitMqConn:%v", rabbitMqConn)
@@ -72,11 +119,11 @@ func GetRabbitMqConn() *RabbitMQ {
 }
 
 func (r *RabbitMQ) Connect() (err error) {
-	r.Conn, err = amqp.Dial(*amqpUri)
+	r.Conn, err = amqp.Dial(rabbitMQURL)
 	if err != nil {
 		logrus.Errorf("[amqp] connect error: %s\n", err)
 		for i := 0; i <= connRetry; i++ {
-			r.Conn, err = amqp.Dial(*amqpUri)
+			r.Conn, err = amqp.Dial(rabbitMQURL)
 			if err != nil {
 				logrus.Errorf("[amqp] connect retry count :%v, error: %s\n", i, err)
 			} else {

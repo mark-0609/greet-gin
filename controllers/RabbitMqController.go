@@ -4,16 +4,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/go-redis/redis"
-	"github.com/jinzhu/gorm"
-	"github.com/sirupsen/logrus"
-	"github.com/streadway/amqp"
 	"greet_gin/database"
 	"greet_gin/models"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis"
+	"github.com/jinzhu/gorm"
+	"github.com/sirupsen/logrus"
+	"github.com/streadway/amqp"
 )
 
 type RabbitMqController struct{}
@@ -190,58 +191,82 @@ func (t RabbitMqController) ConsumeMq(c *gin.Context) {
 		})
 		return
 	}
-	go func() {
-		defer func() {
-			if err := recover(); err != nil {
-				logrus.Errorf("consume message fail :%v ", err)
-			}
-		}()
-		rabbit := database.GetRabbitMqConn()
-		if req.HasNewConnection {
-			rabbit = database.RabbitMqInit()
-		}
-		//TODO: 待关闭
-		defer func(rabbit *database.RabbitMQ) {
-			err := rabbit.Close()
-			logrus.Infof("rabbitmq consume close success")
-			if err != nil {
-				logrus.Errorf("rabbitmq consume close fail :%v ", err)
-			}
-		}(rabbit)
-		redisClient := database.GetRedisClient()
-		msg := make(chan []byte)
-		consumer := req.Consumer
-		err := rabbit.ConsumeQueue(req.QueueName, consumer, msg, false, func(body amqp.Delivery) (err error) {
-			var data int
-			err = json.Unmarshal(body.Body, &data)
-			if err != nil {
-				logrus.Errorf("err:%v", err)
-				return err
-			}
-			// 避免重复消费 可以使用全局唯一字段判断，或者将消费的数据id存入redis
-			result, err := redisClient.Get(strconv.Itoa(data)).Result()
-			if !errors.Is(err, redis.Nil) {
-				logrus.Infof("消息已被消费,忽略 %s", strconv.Itoa(data))
-				_ = body.Reject(false)
-				return
-			}
-			if len(result) > 0 {
-				logrus.Infof("redis data: %s", result)
-			}
-			if err := updateArticleData(data); err != nil {
-				logrus.Errorf("updateArticleData err:%v", err)
-				return err
-			}
-			return nil
-		})
+	redisClient := database.GetRedisClient()
+	go database.ConsumeMessagesWithAck(req.QueueName, func(body amqp.Delivery) error {
+		var data int
+		err := json.Unmarshal(body.Body, &data)
 		if err != nil {
-			logrus.Errorf("[amqp] consume queue error: %s\n", err)
-			return
+			logrus.Errorf("err:%v", err)
+			return err
 		}
-		for {
-			<-msg
+		// 避免重复消费 可以使用全局唯一字段判断，或者将消费的数据id存入redis
+		result, err := redisClient.Get(strconv.Itoa(data)).Result()
+		if !errors.Is(err, redis.Nil) {
+			logrus.Infof("消息已被消费,忽略 %s", strconv.Itoa(data))
+			_ = body.Reject(false)
+			return nil
 		}
-	}()
+		if len(result) > 0 {
+			logrus.Infof("redis data: %s", result)
+		}
+		if err := updateArticleData(data); err != nil {
+			logrus.Errorf("updateArticleData err:%v", err)
+			return err
+		}
+		return nil
+	}, func() {})
+	// go func() {
+	// 	defer func() {
+	// 		if err := recover(); err != nil {
+	// 			logrus.Errorf("consume message fail :%v ", err)
+	// 		}
+	// 	}()
+	// 	rabbit := database.GetRabbitMqConn()
+	// 	if req.HasNewConnection {
+	// 		rabbit = database.RabbitMqInit()
+	// 	}
+	// 	//TODO: 待关闭
+	// 	defer func(rabbit *database.RabbitMQ) {
+	// 		err := rabbit.Close()
+	// 		logrus.Infof("rabbitmq consume close success")
+	// 		if err != nil {
+	// 			logrus.Errorf("rabbitmq consume close fail :%v ", err)
+	// 		}
+	// 	}(rabbit)
+	// 	redisClient := database.GetRedisClient()
+	// 	msg := make(chan []byte)
+	// 	consumer := req.Consumer
+	// 	err := rabbit.ConsumeQueue(req.QueueName, consumer, msg, false, func(body amqp.Delivery) (err error) {
+	// 		var data int
+	// 		err = json.Unmarshal(body.Body, &data)
+	// 		if err != nil {
+	// 			logrus.Errorf("err:%v", err)
+	// 			return err
+	// 		}
+	// 		// 避免重复消费 可以使用全局唯一字段判断，或者将消费的数据id存入redis
+	// 		result, err := redisClient.Get(strconv.Itoa(data)).Result()
+	// 		if !errors.Is(err, redis.Nil) {
+	// 			logrus.Infof("消息已被消费,忽略 %s", strconv.Itoa(data))
+	// 			_ = body.Reject(false)
+	// 			return
+	// 		}
+	// 		if len(result) > 0 {
+	// 			logrus.Infof("redis data: %s", result)
+	// 		}
+	// 		if err := updateArticleData(data); err != nil {
+	// 			logrus.Errorf("updateArticleData err:%v", err)
+	// 			return err
+	// 		}
+	// 		return nil
+	// 	})
+	// 	if err != nil {
+	// 		logrus.Errorf("[amqp] consume queue error: %s\n", err)
+	// 		return
+	// 	}
+	// 	for {
+	// 		<-msg
+	// 	}
+	// }()
 	c.JSON(200, Response{
 		Code: 0,
 		Msg:  "ok",
