@@ -203,7 +203,7 @@ func (t RabbitMqController) ConsumeMq(c *gin.Context) {
 		result, err := redisClient.Get(strconv.Itoa(data)).Result()
 		if !errors.Is(err, redis.Nil) {
 			logrus.Infof("消息已被消费,忽略 %s", strconv.Itoa(data))
-			_ = body.Reject(false)
+			// _ = body.Reject(false)
 			return nil
 		}
 		if len(result) > 0 {
