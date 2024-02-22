@@ -150,6 +150,12 @@ func (t RabbitMqController) ProductMq(c *gin.Context) {
 			return
 		}
 		rabbit := database.GetRabbitMqConn()
+		err = rabbit.Channel.Confirm(false)
+		if err != nil {
+			logrus.Errorf("Failed to enable publisher confirms:%v", err.Error())
+			return
+		}
+		confirms := rabbit.Channel.NotifyPublish(make(chan amqp.Confirmation, len(articles)))
 		//defer rabbit.Close()
 		for _, data := range articles {
 			res, err := json.Marshal(data.Id)
@@ -158,8 +164,23 @@ func (t RabbitMqController) ProductMq(c *gin.Context) {
 				return
 			}
 			// TODO: 需要开启confirm模式 手动ack
-			if err = rabbit.Publish(entity.Exchange, entity.Key, entity.DeliveryMode, entity.Priority, string(res)); err != nil {
+			if err = rabbit.Channel.Publish(entity.Exchange, entity.Key, false, false, amqp.Publishing{
+				DeliveryMode:    amqp.Persistent,
+				Headers:         amqp.Table{},
+				ContentType:     "text/plain",
+				ContentEncoding: "",
+				Priority:        entity.Priority,
+				Body:            res,
+			}); err != nil {
 				logrus.Errorf("database err:%v", err.Error())
+				return
+			}
+		}
+		select {
+		case confirm := <-confirms:
+			if !confirm.Ack {
+				logrus.Errorf("Failed delivery of message with body...", confirm)
+				// 可以在这里实现重试逻辑
 				return
 			}
 		}
